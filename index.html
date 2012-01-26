@@ -21,7 +21,7 @@
 	
 	<body>
 		<div id="display"></div>
-		<audio id="audio" src="Impromptu in A.ogg" controls autoplay></audio>
+		<audio id="audio" src="Impromptu in A.ogg" controls ></audio>
 		
 		<script>
 			// Set up variables
@@ -48,7 +48,12 @@
 				cameraAngle,
 				
 				cubes,
-				numCubes;
+				numCubes,
+
+
+				context,
+				source,
+				jsProcessor;
 
 			 window.requestAnimFrame = (function(callback){
 				return window.requestAnimationFrame ||
@@ -58,6 +63,7 @@
 				window.msRequestAnimationFrame ||
 				function(callback){
 				    window.setTimeout(callback, 1000 / 60);
+
 				};
 			    })();
 				
@@ -121,8 +127,27 @@
 				audio.addEventListener("loadedmetadata", onLoadedmetadata, false);
 				audio.addEventListener("MozAudioAvailable", onAudioAvailable, false);
 				document.addEventListener("keyup", onKeyup, false);
+				initAudio();
+
 			};
-			
+			function initAudio() {
+			    try{
+				    context = new webkitAudioContext();	    
+				    source = context.createBufferSource();
+
+				    // This AudioNode will do the amplitude modulation effect directly in JavaScript
+				    jsProcessor = context.createJavaScriptNode(2048);
+				    jsProcessor.onaudioprocess = audioAvailable;			// run jsfft audio frame event
+				    
+				    // Connect the processing graph: source -> jsProcessor -> analyser -> destination
+				    source.connect(jsProcessor);
+				    jsProcessor.connect(context.destination);
+
+				    loadAudioBuffer("Impromptu in A.ogg");
+			    }catch( error ){
+			    }
+			}
+
 			function createSphere() {
 				// Set up sphere variables
 				var radius = 100,
@@ -229,7 +254,7 @@
 				
 			function loop(lastTime) {
 				// Continue if animation is running
-				if (!false) {		
+				if (!stop) {		
 					// Loop through each cube in the scene
 					var i, cube;			
 					for (i = 0; i < numCubes; i++) {
@@ -253,27 +278,12 @@
 			
 				// Update stats.js
 				stats.update();
-				
-//				if(navigator.appCodeName == 'Mozilla'){
-					// Request a new animation frame
-//					window.mozRequestAnimationFrame(loop);
-//				}else{
-
-					// update
-					var date = new Date();
-					var time = date.getTime();
-					var timeDiff = time - lastTime;
-				 
-					// render
-//					renderer.render(scene, camera);
 				 
 					// request new frame
 					requestAnimFrame(function(){
-					    loop(lastTime);
+					    loop();
 					});
 				    
-
-//				}
 			};
 			
 			function onLoadedmetadata() {
@@ -292,13 +302,13 @@
 				peak = new Float32Array(bufferSize);
 				fft = new FFT(bufferSize, 44100);
 				
-				loop(new Date().getTime());
+				loop();
 			};
 			
 			function onAudioAvailable(e) {
 				// e.frameBuffer is a Float32Array with the raw audio data (32-bit float values)
 				// obtained from decoding the audio
-				
+
 				// Audio FFT visualisation code from dsp.js
 				// Deinterleave and mix down to mono
 				signal = DSP.getChannel(DSP.MIX, e.frameBuffer);
@@ -320,7 +330,56 @@
 					};
 				};
 			};
-			
+			function loadAudioBuffer(url) {
+			    // Load asynchronously
+
+			    var request = new XMLHttpRequest();
+			    request.open("GET", url, true);
+			    request.responseType = "arraybuffer";
+
+			    request.onload = function() { 
+				source.buffer = context.createBuffer(request.response, false);
+			    	source.loop = true;
+				source.noteOn(0);
+			    }
+
+			    request.send();
+
+			};
+			//audio event for Chrome
+			function audioAvailable(event) {
+
+				// Copy input arrays to output arrays to play sound
+				var inputArrayL = event.inputBuffer.getChannelData(0);
+				var inputArrayR = event.inputBuffer.getChannelData(1);
+				var outputArrayL = event.outputBuffer.getChannelData(0);
+				var outputArrayR = event.outputBuffer.getChannelData(1);
+
+				for (var i = 0; i < inputArrayL.length; ++i) {
+					outputArrayL[i] = inputArrayL[i];
+					outputArrayR[i] = inputArrayR[i];
+					signal[i] = (inputArrayL[i] + inputArrayR[i]) / 2;
+				// create data frame for fft - deinterleave and mix down to mono
+				}
+
+				// Perform forward transform
+				fft.forward(signal);
+
+				// Calculate peak values
+				for (var i = 0; i < bufferSize; i++) {
+					// Equalize: attenuates low freqs and boosts highs
+					fft.spectrum[i] *= -1 * Math.log((fft.bufferSize/2 - i) * (0.5/fft.bufferSize/2)) * fft.bufferSize; 
+					
+					if (peak[i] < fft.spectrum[i]) {
+						// Assign a new peak value
+						peak[i] = fft.spectrum[i];
+					} else {
+						// Peak slowly falls until a new peak is found
+						peak[i] *= 0.99;
+					};
+				};
+
+			}
 			// Keyboard controls
 			function onKeyup(e) {
 				switch (e.keyCode) {
