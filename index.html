@@ -9,6 +9,14 @@
 		<script src="dsp.js"></script>
 		<script src="Stats.js"></script>
 		<script src="Three.js"></script>
+		<script>
+
+		    window.onload = function() {
+			
+		    }
+
+
+		</script>
 	</head>
 	
 	<body>
@@ -41,6 +49,17 @@
 				
 				cubes,
 				numCubes;
+
+			 window.requestAnimFrame = (function(callback){
+				return window.requestAnimationFrame ||
+				window.webkitRequestAnimationFrame ||
+				window.mozRequestAnimationFrame ||
+				window.oRequestAnimationFrame ||
+				window.msRequestAnimationFrame ||
+				function(callback){
+				    window.setTimeout(callback, 1000 / 60);
+				};
+			    })();
 				
 			// Start the visualisation
 			init();
@@ -68,6 +87,7 @@
 				
 				// Create a WebGL renderer and camera
 				renderer = new THREE.WebGLRenderer();
+				renderer.setSize(window.innerWidth, window.innerHeight);
 				camera = new THREE.Camera(cameraViewAngle, cameraAspect, cameraNear, cameraFar);
 
 				// Create a WebGL scene
@@ -207,9 +227,9 @@
 				};
 			};
 				
-			function loop() {
+			function loop(lastTime) {
 				// Continue if animation is running
-				if (!stop) {		
+				if (!false) {		
 					// Loop through each cube in the scene
 					var i, cube;			
 					for (i = 0; i < numCubes; i++) {
@@ -234,16 +254,34 @@
 				// Update stats.js
 				stats.update();
 				
-				// Request a new animation frame
-				window.mozRequestAnimationFrame(loop);
+//				if(navigator.appCodeName == 'Mozilla'){
+					// Request a new animation frame
+//					window.mozRequestAnimationFrame(loop);
+//				}else{
+
+					// update
+					var date = new Date();
+					var time = date.getTime();
+					var timeDiff = time - lastTime;
+				 
+					// render
+//					renderer.render(scene, camera);
+				 
+					// request new frame
+					requestAnimFrame(function(){
+					    loop(lastTime);
+					});
+				    
+
+//				}
 			};
 			
 			function onLoadedmetadata() {
 				// Number of channels in the audio (mono = 1, stereo = 2, etc)
-				channels = audio.mozChannels;
+				channels = audio.mozChannels || 2;
 				
 				// The frameBuffer has a length of [audio channels * 1024] by default
-				frameBufferLength = audio.mozFrameBufferLength;
+				frameBufferLength = audio.mozFrameBufferLength || 2*1024;
 				
 				// Find frameBuffer length for a single channel
 				// This is because we use mono for dsp.js
@@ -254,7 +292,7 @@
 				peak = new Float32Array(bufferSize);
 				fft = new FFT(bufferSize, 44100);
 				
-				loop();
+				loop(new Date().getTime());
 			};
 			
 			function onAudioAvailable(e) {
